@@ -48,10 +48,11 @@ import org.springframework.security.authentication.event.AuthenticationSuccessEv
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.stereotype.Component;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import org.springframework.stereotype.Component;
 
 @Component
 public class InternalAuthenticationProvider implements AuthenticationProvider,
@@ -72,6 +73,9 @@ public class InternalAuthenticationProvider implements AuthenticationProvider,
     @Autowired
     private ShaPasswordEncoder passwordEncoder;
 
+    @Autowired
+    private BCryptPasswordEncoder bCryptPasswordEncoder;
+
     @Override
     public Authentication authenticate(Authentication authentication) {
         Preconditions.checkArgument(authentication instanceof InternalAuthentication,
@@ -90,7 +94,6 @@ public class InternalAuthenticationProvider implements AuthenticationProvider,
 
         assertUserNotLocked(username);
 
-        // Determine username
         User user = resourceServerConnector.getUserByUsername(username);
 
         if (user == null) {
@@ -101,10 +104,18 @@ public class InternalAuthenticationProvider implements AuthenticationProvider,
             throw new DisabledException("The user with the username '" + username + "' is disabled!");
         }
 
-        String hashedPassword = passwordEncoder.encodePassword(password, user.getId());
+        User checkedUser = resourceServerConnector.searchUserByUserNameAndPassword(username,
+                bCryptPasswordEncoder.encode(password));
 
-        if (resourceServerConnector.searchUserByUserNameAndPassword(username, hashedPassword) == null) {
-            throw new BadCredentialsException("Bad credentials");
+        if (checkedUser == null) {
+            checkedUser = resourceServerConnector.searchUserByUserNameAndPassword(username,
+                    passwordEncoder.encodePassword(password, user.getId()));
+            if (checkedUser != null) {
+                User replaceUser = new User.Builder(checkedUser).setPassword(password).build();
+                resourceServerConnector.replaceUser(user.getId(), replaceUser);
+            } else {
+                throw new BadCredentialsException("Bad credentials");
+            }
         }
 
         User authUser = new User.Builder(username).setId(user.getId()).build();
@@ -128,9 +139,9 @@ public class InternalAuthenticationProvider implements AuthenticationProvider,
             return;
         }
 
-        Date logindate = lastFailedLogin.get(username);
+        Date loginDate = lastFailedLogin.get(username);
 
-        if (logindate != null && isWaitTimeOver(logindate)) {
+        if (loginDate != null && isWaitTimeOver(loginDate)) {
             accessCounter.remove(username);
             lastFailedLogin.remove(username);
         }

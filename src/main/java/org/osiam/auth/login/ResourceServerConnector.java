@@ -75,6 +75,10 @@ public class ResourceServerConnector {
         return createOsiamConnector().updateUser(userId, user, osiamAccessTokenProvider.createAccessToken());
     }
 
+    public User replaceUser(String userId, User user) {
+        return createOsiamConnector().replaceUser(userId, user, osiamAccessTokenProvider.createAccessToken());
+    }
+
     public User searchUserByUserNameAndPassword(String userName, String hashedPassword) {
         Query query = new QueryBuilder().filter("userName eq \"" + userName + "\""
                 + " and password eq \"" + hashedPassword + "\"").build();
