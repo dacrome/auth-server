@@ -23,17 +23,13 @@
 
 package org.osiam.auth.login.internal;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import org.osiam.auth.login.ResourceServerConnector;
 import org.osiam.resources.scim.Role;
 import org.osiam.resources.scim.User;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationListener;
@@ -48,14 +44,21 @@ import org.springframework.security.authentication.event.AuthenticationSuccessEv
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-
-import com.google.common.base.Preconditions;
-import com.google.common.base.Strings;
 import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Component
 public class InternalAuthenticationProvider implements AuthenticationProvider,
         ApplicationListener<AbstractAuthenticationEvent> {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(InternalAuthenticationProvider.class.getName());
 
     @Value("${org.osiam.auth-server.tempLock.count:0}")
     private Integer maxLoginFailures;
@@ -81,11 +84,13 @@ public class InternalAuthenticationProvider implements AuthenticationProvider,
         String password = (String) authentication.getCredentials();
 
         if (Strings.isNullOrEmpty(username)) {
-            throw new BadCredentialsException("InternalAuthenticationProvider: Empty Username");
+            LOGGER.warn("The username is empty");
+            throw new BadCredentialsException("Bad credentials");
         }
 
         if (Strings.isNullOrEmpty(password)) {
-            throw new BadCredentialsException("InternalAuthenticationProvider: Empty Password");
+            LOGGER.warn("The password is empty");
+            throw new BadCredentialsException("Bad credentials");
         }
 
         assertUserNotLocked(username);
@@ -94,11 +99,13 @@ public class InternalAuthenticationProvider implements AuthenticationProvider,
         User user = resourceServerConnector.getUserByUsername(username);
 
         if (user == null) {
-            throw new BadCredentialsException("The user with the username '" + username + "' doesn't exist!");
+            LOGGER.warn("The user with the username '" + username + "' doesn't exist!");
+            throw new BadCredentialsException("Bad credentials");
         }
 
         if (user.isActive() != Boolean.TRUE) {
-            throw new DisabledException("The user with the username '" + username + "' is disabled!");
+            LOGGER.warn("The user with the username '" + username + "' is disabled!");
+            throw new DisabledException("Bad credentials");
         }
 
         String hashedPassword = passwordEncoder.encodePassword(password, user.getId());
